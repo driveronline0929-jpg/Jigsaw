@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>🧩 AR Jigsaw กันตังดีเบอร์นี้ - 4x4 Edition</title>
+    <!-- Tailwind CSS & Google Fonts -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Mitr:wght@400;600;700&display=swap" rel="stylesheet">
+    
+    <!-- MediaPipe & Three.js Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    
+    <style>
+        body { font-family: 'Mitr', sans-serif; }
+        #webcam { transform: scaleX(-1); will-change: transform; opacity: 0.4; }
+        .blur-bg { backdrop-filter: blur(12px); }
+    </style>
+</head>
+<body class="bg-slate-950 m-0 p-0 overflow-hidden select-none touch-none w-screen h-screen text-white">
+
+    <!-- 1. หน้าต่างกรอกชื่อเข้าเล่นเกม (Login overlay) -->
+    <div id="screen-login" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 blur-bg p-4 transition-all duration-500">
+        <div class="bg-slate-900 border-4 border-cyan-500/30 p-8 rounded-3xl shadow-2xl max-w-sm w-full text-center">
+            <div class="text-5xl mb-4 animate-bounce">🧩👨‍✈️</div>
+            <h2 class="text-2xl font-bold text-cyan-400 mb-2">ลงทะเบียนผู้เล่น</h2>
+            <p class="text-xs text-slate-400 mb-6">กรอกชื่อจริงเพื่อบันทึกสถิติความไวในการต่อจิ๊กซอว์ 4x4</p>
+            <div class="mb-5">
+                <input type="text" id="player-name" placeholder="ชื่อ - นามสกุลของคุณ" 
+                       class="w-full bg-slate-800 border-2 border-slate-700 rounded-2xl px-4 py-3 text-base text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-all text-center font-medium">
+            </div>
+            <button id="btn-submit-name" class="w-full bg-gradient-to-r from-cyan-500 to-blue-500 text-slate-950 font-black py-3.5 px-4 rounded-xl text-sm shadow-md cursor-pointer transform active:scale-95 transition-all">
+                🧩 เข้าสู่ระบบเกม
+            </button>
+        </div>
+    </div>
+
+    <!-- 2. หน้าแรกต้อนรับของเกม (Welcome Screen) -->
+    <div id="screen-welcome" class="fixed inset-0 z-40 flex flex-col items-center justify-center p-6 bg-slate-900/95 text-center hidden opacity-0 transition-all duration-500">
+        <div class="bg-slate-900 border-4 border-cyan-500/40 p-8 rounded-3xl shadow-[0_0_40px_rgba(6,182,212,0.3)] max-w-xl w-full">
+            <div class="text-6xl mb-4">🧩✨</div>
+            <h1 class="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-sky-300 to-emerald-400 mb-3 tracking-wide drop-shadow-md">
+                AR Jigsaw ของดีเมืองกันตัง
+            </h1>
+            <p class="text-sm text-slate-300 mb-6 leading-relaxed">
+                ใช้ <span class="text-yellow-400 font-semibold animate-pulse">"นิ้วชี้เล็งทับชิ้นส่วนค้างไว้"</span> เพื่อจับจิ๊กซอว์ลากกลางอากาศ<br>
+                นำไปเรียงต่อในกรอบเส้นประตรงกลางให้ภาพสมบูรณ์เร็วที่สุด!
+            </p>
+            
+            <div class="bg-slate-950/60 rounded-xl p-4 text-left text-xs space-y-2 mb-6 border border-slate-800 text-slate-300">
+                <div class="font-bold text-sm text-center text-cyan-400 border-b border-slate-800 pb-1 mb-1">📝 ข้อมูลการแข่งขัน 4x4 (16 ชิ้น)</div>
+                <div class="flex justify-between"><span>🧩 จำนวนชิ้นส่วนทั้งหมด</span> <span class="text-cyan-400 font-bold font-mono">16 ชิ้นชวนท้าทาย</span></div>
+                <div class="flex justify-between"><span>⏱️ ระบบบันทึกสถิติ</span> <span class="text-emerald-400 font-bold">จับเวลาเดินหน้าลงตาราง Sheet</span></div>
+            </div>
+
+            <button id="btn-play" class="w-full bg-gradient-to-r from-cyan-500 to-blue-500 text-slate-950 font-black py-4 px-6 rounded-2xl text-lg shadow-lg cursor-pointer transform hover:scale-105 active:scale-95 transition-all uppercase tracking-wider">
+                🎮 เริ่มประกอบจิ๊กซอว์!
+            </button>
+        </div>
+    </div>
+
+    <!-- 3. หน้าสรุปเวลาชนะภารกิจ (Game Over Screen) -->
+    <div id="screen-result" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/95 backdrop-blur-xl p-6 hidden opacity-0 transition-all duration-500">
+        <div class="bg-slate-900 border-4 border-yellow-500/30 p-8 rounded-3xl shadow-2xl max-w-sm w-full text-center">
+            <h2 class="text-3xl font-black text-yellow-400 mb-1">🎉 ภารกิจสำเร็จ!</h2>
+            <p class="text-xs text-slate-400 mb-6">ประกอบภาพสมบูรณ์แบบเรียบร้อย</p>
+            
+            <div class="relative w-32 h-32 mx-auto mb-6 flex items-center justify-center bg-slate-950 rounded-full border border-slate-800 shadow-inner">
+                <div class="text-6xl drop-shadow-[0_10px_10px_rgba(0,0,0,0.5)]">🏆</div>
+            </div>
+
+            <div class="space-y-3 mb-6 bg-slate-950/50 p-4 rounded-xl border border-slate-800/80">
+                <div>
+                    <div class="text-xs text-slate-400">ชื่อนักต่อจิ๊กซอว์</div>
+                    <div id="final-name" class="text-base font-bold text-cyan-400 mt-0.5">-</div>
+                </div>
+                <div class="border-t border-slate-800 pt-2">
+                    <div class="text-xs text-slate-400">เวลาที่ใช้ไปทั้งหมด</div>
+                    <div id="final-time" class="text-3xl font-black text-white font-mono">0 วินาที</div>
+                </div>
+            </div>
+
+            <button id="btn-send-data" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 px-4 rounded-xl text-xs mb-3 transition-all cursor-pointer">
+                📤 ส่งเวลาบันทึกลง Google Sheets
+            </button>
+            <button id="btn-restart" class="w-full bg-gradient-to-r from-yellow-500 to-amber-500 text-slate-950 font-black py-2.5 px-4 rounded-xl text-xs cursor-pointer transition-all">
+                🔄 เล่นใหม่อีกครั้ง
+            </button>
+        </div>
+    </div>
+
+    <!-- 4. ส่วนระบบ HUD ตัวจับเวลาหน้าจอเกมจริง -->
+    <div id="game-hud" class="absolute top-4 left-4 right-4 z-40 flex justify-between items-start pointer-events-none hidden">
+        <div class="bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-2xl min-w-[140px] text-center">
+            <div id="ui-pilot-name" class="text-[10px] text-cyan-400 font-bold mb-1 truncate max-w-[120px]">👨‍✈️ ผู้เล่น: -</div>
+            <div class="text-[10px] text-slate-400 font-medium">⏱️ เวลาที่ใช้</div>
+            <div id="ui-timer" class="text-3xl font-black text-emerald-400 font-mono">0</div>
+        </div>
+        <div class="bg-slate-900/90 backdrop-blur-md p-4 rounded-2xl border border-slate-800 shadow-2xl min-w-[140px] text-center">
+            <div class="text-[10px] text-slate-400 font-medium">🧩 ล็อกเข้าเป้าแล้ว</div>
+            <div id="ui-progress" class="text-3xl font-black text-cyan-400 font-mono">0 / 16</div>
+        </div>
+    </div>
+
+    <!-- ส่วนเนื้อหากล้องเว็บแคมหลักและจอ 3D -->
+    <video id="webcam" class="absolute w-full h-full object-cover z-10" autoplay playsinline muted></video>
+    <div id="canvas3d" class="absolute w-full h-full z-20 pointer-events-none"></div>
+
+    <script>
+        // 🚨 นำลิงก์ Web App URL จาก Google Apps Script ของพี่มาวางแทนข้อความตรงนี้ครับ
+        const GAS_WEB_APP_URL = "วางลิงก์เว็บแอปของคุณตรงนี้";
+
+        // 🚨 ลิงก์ภาพของดีเมืองกันตังที่จะนำมาตัดแบ่ง 16 ชิ้น (สามารถเปลี่ยนลิงก์ภาพของพี่ตรงนี้ได้เลยครับ)
+        const JIGSAW_IMAGE_URL = "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?q=80&w=600&auto=format&fit=crop";
+
+        let pName = "";
+        let timeElapsed = 0;
+        let gameActive = false;
+        let gameTimerInterval = null;
+        let audioCtx = null;
+        let jigsawPieces = [];
+        let selectedPiece = null;
+        let hasHandDetected = false;
+        let countSnapped = 0;
+
+        // Setup Three.js ฉากหลัง
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.getElementById('canvas3d').appendChild(renderer.domElement);
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.95);
+        scene.add(ambientLight);
+
+        // เป้าเล็งกลมสีทองติดตามนิ้วชี้สำหรับใช้คีบหรือลากชิ้นงาน
+        const fingerIndicatorGeo = new THREE.TorusGeometry(0.18, 0.035, 8, 32);
+        const fingerIndicatorMat = new THREE.MeshBasicMaterial({ color: 0xeab308, transparent: true, opacity: 0.95 });
+        const fingerIndicator = new THREE.Mesh(fingerIndicatorGeo, fingerIndicatorMat);
+        fingerIndicator.position.set(100, 100, -5);
+        scene.add(fingerIndicator);
+
+        // สร้างกรอบไกด์ไลน์เส้นประจาง ๆ ตรงกลางเป้าหมายขนาดรวม 3.2 x 3.2 เมตรในมิติ 3D
+        const guideGeo = new THREE.EdgesGeometry(new THREE.PlaneGeometry(3.2, 3.2));
+        const guideMat = new THREE.LineBasicMaterial({ color: 0x06b6d4, transparent: true, opacity: 0.4 });
+        const guideFrame = new THREE.LineSegments(guideGeo, guideMat);
+        guideFrame.position.set(0, 0, -5.02);
+        scene.add(guideFrame);
+
+        // หน้าแรกเช็กชื่อ
+        document.getElementById('btn-submit-name').addEventListener('click', () => {
+            const inputVal = document.getElementById('player-name').value.trim();
+            if (inputVal === "") { alert("❌ กรุณากรอกชื่อจริงก่อนเข้าเล่นเกมนะครับ!"); return; }
+            pName = inputVal;
+            document.getElementById('ui-pilot-name').innerText = `👤 ผู้เล่น: ${pName}`;
+            document.getElementById('screen-login').classList.add('opacity-0', 'pointer-events-none');
+            setTimeout(() => {
+                document.getElementById('screen-login').classList.add('hidden');
+                const welcomeScreen = document.getElementById('screen-welcome');
+                welcomeScreen.classList.remove('hidden');
+                setTimeout(() => { welcomeScreen.classList.add('opacity-100'); }, 50);
+            }, 500);
+        });
+
+        function initAudio() {
+            if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        function playSound(type) {
+            if (!audioCtx) return;
+            let osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            if (type === 'snap') { // ดูดเข้าล็อก: เสียงกริ๊กคลิกสำเร็จ
+                osc.type = 'sine'; osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.08);
+                gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.08);
+            }
+        }
+
+        // 🛠️ อัลกอริทึมตัดแบ่งภาพพื้นหลังเป็น 16 ส่วนย่อยอิสระ ($4 \times 4$) ผ่าน HTML Canvas 🛠️
+        function createJigsawBoard() {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.src = JIGSAW_IMAGE_URL;
+            img.onload = function() {
+                const pieceW = 128; // ขนาดพิกเซลต่อชิ้นส่วน
+                const pieceH = 128;
+                
+                countSnapped = 0;
+                jigsawPieces.forEach(p => scene.remove(p.mesh));
+                jigsawPieces = [];
+
+                // ลูปหั่นแกนตาราง 4 แถวแนวนอน x 4 แถวแนวตั้ง = 16 ชิ้นสัมบูรณ์
+                for (let row = 0; row < 4; row++) {
+                    for (let col = 0; col < 4; col++) {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = pieceW; canvas.height = pieceH;
+                        const ctx = canvas.getContext('2d');
+
+                        // ตัดเศษรูปภาพตามตำแหน่งช่อง
+                        ctx.drawImage(img, col * (img.width/4), row * (img.height/4), img.width/4, img.height/4, 0, 0, pieceW, pieceH);
+                        
+                        // วาดเส้นขอบบางชิ้นงานให้สังเกตแยกชิ้นง่ายขึ้น
+                        ctx.strokeStyle = "rgba(255,255,255,0.7)"; ctx.lineWidth = 3; ctx.strokeRect(0,0,pieceW,pieceH);
+
+                        const texture = new THREE.CanvasTexture(canvas);
+                        const mat = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
+                        const geom = new THREE.PlaneGeometry(0.8, 0.8); // แต่ละชิ้นมีขนาด 0.8 x 0.8 เมตร
+                        const mesh = new THREE.Mesh(geom, mat);
+
+                        // พิกัดเป้าหมายจริง (Correct Position Grid) ในฉาก 3D
+                        // คํานวณให้ประกอบรวมร่างกันอยู่ตรงกลางกรอบพอดี
+                        const targetX = (col - 1.5) * 0.8;
+                        const targetY = -(row - 1.5) * 0.8;
+
+                        // สุ่มตำแหน่งกระจายตัวชิ้นงานไปอยู่ฝั่งซ้ายสุดและขวาสุดของขอบจอเพื่อให้นักเรียนลากเข้ามา
+                        let randomX = (Math.random() > 0.5 ? 2.3 : -2.3) + (Math.random() - 0.5) * 0.8;
+                        let randomY = (Math.random() - 0.5) * 3.2;
+
+                        mesh.position.set(randomX, randomY, -5.0);
+                        scene.add(mesh);
+
+                        jigsawPieces.push({
+                            mesh: mesh,
+                            targetX: targetX,
+                            targetY: targetY,
+                            isSnapped: false
+                        });
+                    }
+                }
+                document.getElementById('ui-progress').innerText = `0 / 16`;
+            };
+        }
+
+        function startGame() {
+            initAudio();
+            timeElapsed = 0; gameActive = true;
+            document.getElementById('ui-timer').innerText = timeElapsed;
+            document.getElementById('game-hud').classList.remove('hidden');
+
+            createJigsawBoard(); // สร้างหั่นชิ้นงาน 16 ส่วน
+
+            // ตัวนับเวลาเดินหน้าความละเอียดสูง
+            gameTimerInterval = setInterval(() => {
+                timeElapsed++;
+                document.getElementById('ui-timer').innerText = timeElapsed;
+            }, 1000);
+
+            animateLoop();
+        }
+
+        function animateLoop() {
+            if (!gameActive) return;
+            requestAnimationFrame(animateLoop);
+
+            // กลไกจิ้มนิ้วชี้ขยับย้ายตำแหน่งชิ้นส่วนจิ๊กซอว์
+            if (hasHandDetected && selectedPiece && !selectedPiece.isSnapped) {
+                // อัปเดตพิกัดวัตถุชิ้นงานให้ลอยติดตามเป้าสีทองปลายนิ้วชี้อย่างติดมือลื่นไหล
+                selectedPiece.mesh.position.x += (fingerIndicator.position.x - selectedPiece.mesh.position.x) * 0.4;
+                selectedPiece.mesh.position.y += (fingerIndicator.position.y - selectedPiece.mesh.position.y) * 0.4;
+
+                // 📐 เช็กระยะสัมพัทธ์ระหว่างพิกัดปัจจุบัน กับพิกัดล็อกจริง (Snap Check)
+                let distX = Math.abs(selectedPiece.mesh.position.x - selectedPiece.targetX);
+                let distY = Math.abs(selectedPiece.mesh.position.y - selectedPiece.targetY);
+
+                // ถ้านักเรียนลากชิ้นงานเข้ามาใกล้เป้าหมายในระยะไม่เกิน 0.22 เมตร ให้ทำการดูดเข้าล็อกทันที
+                if (distX < 0.22 && distY < 0.22) {
+                    selectedPiece.mesh.position.set(selectedPiece.targetX, selectedPiece.targetY, -5.01); // จัดเข้าพิกัดสัมบูรณ์
+                    selectedPiece.isSnapped = true;
+                    countSnapped++;
+                    document.getElementById('ui-progress').innerText = `${countSnapped} / 16`;
+                    playSound('snap');
+                    selectedPiece = null; // ปลดปล่อยชิ้นงานออกจากการควบคุมมือ
+
+                    // หากประกอบเข้าเป้าครบ 16 ชิ้นเท่ากับชนะเกมภารกิจทันที
+                    if (countSnapped === 16) endGame();
+                }
+            }
+            renderer.render(scene, camera);
+        }
+
+        function endGame() {
+            gameActive = false;
+            clearInterval(gameTimerInterval);
+            document.getElementById('game-hud').classList.add('hidden');
+
+            document.getElementById('final-name').innerText = pName;
+            document.getElementById('final-time').innerText = `${timeElapsed} วินาที`;
+            
+            const resScreen = document.getElementById('screen-result');
+            resScreen.classList.remove('hidden');
+            setTimeout(() => { resScreen.classList.add('opacity-100'); }, 50);
+        }
+
+        // --- 🖐️ ระบบประมวลผลกล้อง AR ตรวจจับการลากชิ้นจิ๊กซอว์ ---
+        function onHandResults(results) {
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                hasHandDetected = true;
+                const hand = results.multiHandLandmarks[0];
+                const indexTip = hand[8]; // ดึงพิกัดปลายนิ้วชี้ด้านระนาบ
+
+                let currentHandX = -(indexTip.x - 0.5) * 8.5;
+                let currentHandY = -(indexTip.y - 0.5) * 6.0;
+                
+                fingerIndicator.position.set(currentHandX, currentHandY, -4.9);
+
+                // หากมือผู้เล่นยังไม่ได้กดเลือกชิ้นส่วนชิ้นไหนเลย ให้สแกนหาชิ้นงานใกล้ตัวปลายนิ้วชี้เพื่อทำการอุ้มลาก
+                if (!selectedPiece) {
+                    for (let p of jigsawPieces) {
+                        if (p.isSnapped) continue;
+                        let distanceToFinger = fingerIndicator.position.distanceTo(p.mesh.position);
+                        
+                        // ถ้านิ้วชี้จิ้มค้างทับตัวชิ้นงาน (ระยะประชิดห่างไม่เกิน 0.45) ให้ทำการอุ้มควบคุมชิ้นส่วนนั้น
+                        if (distanceToFinger < 0.45) {
+                            selectedPiece = p;
+                            break;
+                        }
+                    }
+                }
+            } else {
+                fingerIndicator.position.set(100, 100, -5);
+                hasHandDetected = false;
+                selectedPiece = null; // ถ้านักเรียนเอามือออกจากรัศมีกล้อง ให้ปล่อยชิ้นส่วนหลุดมือ
+            }
+        }
+
+        const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
+        hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.55, minTrackingConfidence: 0.55 });
+        hands.onResults(onHandResults);
+
+        const videoElement = document.getElementById('webcam');
+        const cameraUtils = new Camera(videoElement, {
+            onFrame: async () => { await hands.send({ image: videoElement }); },
+            width: 640, height: 480
+        });
+        cameraUtils.start();
+
+        // ฟังก์ชันยิงพิกัดส่งข้อมูลเวลาที่ใช้ เข้าสู่ฐานข้อมูล Google Sheets
+        document.getElementById('btn-send-data').addEventListener('click', () => {
+            const btn = document.getElementById('btn-send-data');
+            btn.innerText = "⏳ กำลังยิงเวลาสถิติลงชีต..."; btn.disabled = true;
+
+            fetch(GAS_WEB_APP_URL, {
+                method: "POST", mode: "no-cors", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: pName, score: timeElapsed, status: "สำเร็จภารกิจต่อจิ๊กซอว์ 4x4 ของดีกันตัง" })
+            }).then(() => {
+                btn.innerText = "📤 ส่งสถิติความไวสำเร็จ!";
+                btn.className = "w-full bg-emerald-600 text-white font-bold py-2.5 px-4 rounded-xl text-xs mb-3";
+            }).catch(() => { alert("ระลอกฐานข้อมูลขัดข้อง"); btn.disabled = false; });
+        });
+
+        document.getElementById('btn-play').addEventListener('click', () => {
+            document.getElementById('screen-welcome').classList.add('opacity-0', 'pointer-events-none');
+            setTimeout(() => { document.getElementById('screen-welcome').classList.add('hidden'); }, 500);
+            startGame();
+        });
+
+        document.getElementById('btn-restart').addEventListener('click', () => {
+            document.getElementById('screen-result').classList.remove('opacity-100');
+            document.getElementById('screen-result').classList.add('hidden');
+            const sendBtn = document.getElementById('btn-send-data');
+            sendBtn.innerText = "📤 ส่งคะแนนไปที่ Google Sheets"; sendBtn.disabled = false;
+            sendBtn.className = "w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold py-2.5 px-4 rounded-xl text-xs mb-3 transition-all cursor-pointer";
+            startGame();
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
